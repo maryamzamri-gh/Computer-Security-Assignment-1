@@ -1,43 +1,52 @@
-import hashlib, struct, binascii
+from Crypto.Cipher import DES
 from Crypto.Random import get_random_bytes
+import base64
 
-# ----- Simple Feistel Block Cipher -----
-class SimpleFeistelBlockCipher:
-    def __init__(self, key: bytes, rounds: int = 8):
-        self.key = key
-        self.rounds = rounds
-        self.round_keys = self._derive_round_keys()
+# Padding function (PKCS5)
+def pad(data):
+    pad_len = 8 - len(data) % 8
+    return data + bytes([pad_len] * pad_len)
 
-    def _derive_round_keys(self):
-        round_keys = []
-        data = self.key
-        for i in range(self.rounds):
-            h = hashlib.sha256(data + bytes([i])).digest()
-            round_keys.append(struct.unpack(">I", h[:4])[0])
-            data = h
-        return round_keys
-
-    def _F(self, half, round_key):
-        x = (half << 5 | half >> 27) & 0xFFFFFFFF
-        x = (x ^ round_key) & 0xFFFFFFFF
-        return ((x * 0x9E3779B1) + 0x7F4A7C15) & 0xFFFFFFFF
-
-    def encrypt_block(self, block):
-        L, R = struct.unpack(">II", block)
-        for k in self.round_keys:
-            L, R = R, L ^ self._F(R, k)
-        return struct.pack(">II", L, R)
-
-    def decrypt_block(self, block):
-        L, R = struct.unpack(">II", block)
-        for k in reversed(self.round_keys):
-            L, R = R ^ self._F(L, k), L
-        return struct.pack(">II", L, R)
-
-# ----- Padding -----
-def pad(data, block_size=8):
-    pad_len = block_size - (len(data) % block_size)
-    return data + bytes([pad_len]) * pad_len
-
+# Unpadding function
 def unpad(data):
-    return data[:-data[-1]]
+    pad_len = data[-1]
+    return data[:-pad_len]
+
+# Generate a DES key (8 bytes)
+def generate_key():
+    return get_random_bytes(8)
+
+# Simulate two rounds of DES encryption
+def des_two_round_encrypt(plaintext, key1, key2):
+    cipher1 = DES.new(key1, DES.MODE_ECB)
+    cipher2 = DES.new(key2, DES.MODE_ECB)
+
+    padded = pad(plaintext.encode('utf-8'))
+    round1 = cipher1.encrypt(padded)
+    round2 = cipher2.encrypt(round1)
+
+    return base64.b64encode(round2).decode('utf-8')
+
+# Simulate two rounds of DES decryption
+def des_two_round_decrypt(ciphertext, key1, key2):
+    cipher1 = DES.new(key1, DES.MODE_ECB)
+    cipher2 = DES.new(key2, DES.MODE_ECB)
+
+    encrypted = base64.b64decode(ciphertext)
+    round1 = cipher2.decrypt(encrypted)
+    round2 = cipher1.decrypt(round1)
+
+    return unpad(round2).decode('utf-8')
+
+# Example usage
+if __name__ == "__main__":
+    key1 = generate_key()
+    key2 = generate_key()
+    plaintext = "HelloDES"
+
+    encrypted = des_two_round_encrypt(plaintext, key1, key2)
+    decrypted = des_two_round_decrypt(encrypted, key1, key2)
+
+    print("Original:", plaintext)
+    print("Encrypted:", encrypted)
+    print("Decrypted:", decrypted)
